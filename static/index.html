@@ -1,0 +1,623 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AutoProcure</title>
+<!-- Tailwind Play CDN, pinned. Classes added later by JS are compiled on the fly. -->
+<script src="https://cdn.tailwindcss.com/3.4.16"></script>
+<script>tailwind.config = { darkMode: "media" };</script>
+<style>
+  body { font-feature-settings: "tnum"; }
+  dialog::backdrop { background: rgb(0 0 0 / .5); }
+  .spin { animation: spin .8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body class="bg-slate-50 text-slate-900 antialiased dark:bg-slate-950 dark:text-slate-100">
+
+<!-- ================================================================ header -->
+<header class="border-b border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+  <div class="mx-auto flex max-w-7xl flex-wrap items-center gap-3 px-4 py-4">
+    <div class="min-w-0">
+      <h1 class="text-lg font-bold tracking-tight sm:text-xl">AutoProcure</h1>
+      <p class="text-sm text-slate-500 dark:text-slate-400">Autonomous Policy-Enforced Procurement Agent</p>
+    </div>
+    <div class="ml-auto flex flex-wrap items-center gap-2 text-xs" id="status">
+      <span id="health" class="inline-flex items-center gap-1.5 rounded-full border border-slate-300 px-2.5 py-1 font-medium text-slate-500 dark:border-slate-700">
+        <span class="h-2 w-2 rounded-full bg-slate-400"></span>Checking backend…
+      </span>
+    </div>
+    <button type="button" id="lock" hidden
+      class="rounded-full border px-3 py-1 text-xs font-semibold"></button>
+  </div>
+</header>
+
+<dialog id="keyDialog" aria-labelledby="keyTitle"
+  class="w-[min(420px,calc(100vw-32px))] rounded-xl border border-slate-200 bg-white p-5 text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
+  <form id="keyForm">
+    <h3 id="keyTitle" class="text-base font-semibold">API key</h3>
+    <p class="mt-1 text-sm text-slate-500 dark:text-slate-400">This deployment needs an API key to run the agent and view requests. It is stored only in this browser.</p>
+    <label class="sr-only" for="keyInput">API key</label>
+    <input id="keyInput" type="password" autocomplete="off" spellcheck="false" placeholder="Paste AUTOPROCURE_API_KEY"
+      class="mt-3 w-full rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500 dark:border-slate-700 dark:bg-slate-950">
+    <div class="mt-4 flex justify-end gap-2 text-sm">
+      <button type="button" id="keyClear" class="rounded-lg px-3 py-2 font-medium text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800">Forget key</button>
+      <button type="button" id="keyCancel" class="rounded-lg border border-slate-300 px-3 py-2 font-medium dark:border-slate-700">Cancel</button>
+      <button type="submit" class="rounded-lg bg-indigo-600 px-3 py-2 font-semibold text-white hover:bg-indigo-500">Save</button>
+    </div>
+  </form>
+</dialog>
+
+<main class="mx-auto grid max-w-7xl gap-5 px-4 py-6 lg:grid-cols-[380px_minmax(0,1fr)]">
+  <!-- ============================================================ left -->
+  <div class="min-w-0 space-y-5">
+    <section class="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+      <h2 class="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400"><label for="req">Purchase request</label></h2>
+      <form id="form">
+        <textarea id="req" maxlength="2000" required rows="4"
+          placeholder="e.g. Procure 2 barcode scanners and packaging tape under $300"
+          class="w-full resize-y rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500 dark:border-slate-700 dark:bg-slate-950"></textarea>
+        <button type="submit" id="submit"
+          class="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-500 disabled:cursor-progress disabled:opacity-70">
+          <span id="submitSpinner" class="spin hidden h-4 w-4 rounded-full border-2 border-white/40 border-t-white"></span>
+          <span id="submitLabel">Submit Procurement Request</span>
+        </button>
+        <p class="mt-1.5 text-center text-xs text-slate-400">Ctrl + Enter to submit</p>
+      </form>
+      <div class="mt-4 grid gap-2" id="presets"></div>
+    </section>
+
+    <section class="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+      <h2 class="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Department budget</h2>
+      <div id="budget" class="text-sm text-slate-400">Loading…</div>
+    </section>
+
+    <section class="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+      <h2 class="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Corporate policy</h2>
+      <div id="policy" class="text-sm text-slate-400">Loading…</div>
+    </section>
+
+    <section class="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+      <h2 class="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Recent requests</h2>
+      <ul id="history" class="space-y-1 text-sm"><li class="text-slate-400">None yet.</li></ul>
+    </section>
+  </div>
+
+  <!-- ============================================================ right -->
+  <section id="result" class="min-w-0" aria-live="polite"></section>
+</main>
+
+<script>
+"use strict";
+
+// ------------------------------------------------------------------ config
+const PRESETS = [
+  { tag: "Scenario 1 · Auto-Approve", tone: "emerald",
+    text: "1 USB barcode scanner and 6-pack packaging tape" },
+  { tag: "Scenario 2 · Manager Review", tone: "amber",
+    text: "2 wireless scanners and 24 rolls thermal paper" },
+  // Verified live to trigger a re-plan: $445 breaks the $350 per-order cap, Gemini self-corrects.
+  { tag: "Scenario 3 · Self-Correction", tone: "indigo",
+    text: "Buy 5 wireless barcode scanners for the new checkout lanes" },
+  { tag: "Scenario 4 · Hard Block", tone: "rose",
+    text: "3 espresso coffee machines" },
+  { tag: "Scenario 5 · Spec Compliance", tone: "indigo",
+    text: "Order 1 warehouse phone with at least 8GB RAM and NFC under $150" },
+];
+
+const RULES = {
+  has_line_items: "Items proposed", sku_in_catalog: "SKUs exist in catalog",
+  quantity_within_limits: "Quantities in range", vendor_approved: "Vendor approved",
+  unit_price_cap: "Unit price cap", spec_compliance: "Technical specifications",
+  unit_price_variance: "Target unit price", within_requester_budget: "Requester's budget",
+  order_hard_cap: "Per-order hard cap", monthly_budget: "Monthly budget",
+  all_requests_matched: "Request fully matched", auto_approval_threshold: "Auto-approval threshold",
+};
+
+// Static class strings so Tailwind always has them.
+const TONE = {
+  emerald: { badge: "bg-emerald-100 text-emerald-800 ring-emerald-600/30 dark:bg-emerald-500/15 dark:text-emerald-300",
+             card: "border-emerald-500/60 bg-emerald-50 dark:bg-emerald-500/10", dot: "bg-emerald-500" },
+  amber:   { badge: "bg-amber-100 text-amber-800 ring-amber-600/30 dark:bg-amber-500/15 dark:text-amber-300",
+             card: "border-amber-500/60 bg-amber-50 dark:bg-amber-500/10", dot: "bg-amber-500" },
+  rose:    { badge: "bg-rose-100 text-rose-800 ring-rose-600/30 dark:bg-rose-500/15 dark:text-rose-300",
+             card: "border-rose-500/60 bg-rose-50 dark:bg-rose-500/10", dot: "bg-rose-500" },
+  indigo:  { badge: "bg-indigo-100 text-indigo-800 ring-indigo-600/30 dark:bg-indigo-500/15 dark:text-indigo-300",
+             card: "border-indigo-500/60 bg-indigo-50 dark:bg-indigo-500/10", dot: "bg-indigo-500" },
+  slate:   { badge: "bg-slate-100 text-slate-700 ring-slate-500/30 dark:bg-slate-500/15 dark:text-slate-300",
+             card: "border-slate-300 bg-white dark:border-slate-700 dark:bg-slate-900", dot: "bg-slate-400" },
+};
+
+const DECISION = {
+  auto_approved: ["AUTO_APPROVED", "emerald"],
+  needs_approval: ["MANAGER_REVIEW", "amber"],
+  blocked: ["BLOCKED", "rose"],
+};
+const STATUS = {
+  paid: ["PAID", "emerald"], awaiting_approval: ["AWAITING APPROVAL", "amber"],
+  payment_pending: ["PAYMENT PENDING", "amber"], blocked: ["BLOCKED", "rose"],
+  payment_failed: ["PAYMENT FAILED", "rose"], needs_review: ["FINANCE REVIEW", "rose"],
+  cancelled: ["CANCELLED", "slate"],
+};
+
+// ----------------------------------------- DOM helper (text only, never innerHTML)
+function h(tag, props, ...kids) {
+  const el = document.createElement(tag);
+  for (const [k, v] of Object.entries(props || {})) {
+    if (v === null || v === undefined || v === false) continue;
+    if (k === "class") el.className = v;
+    else if (k.startsWith("on")) el.addEventListener(k.slice(2), v);
+    else el.setAttribute(k, v === true ? "" : v);
+  }
+  for (const kid of kids.flat(Infinity)) {
+    if (kid === null || kid === undefined || kid === false) continue;
+    el.append(kid instanceof Node ? kid : document.createTextNode(String(kid)));
+  }
+  return el;
+}
+const $ = (s) => document.querySelector(s);
+const money = (s) => "$" + Number(s).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const badge = ([label, tone], extra = "") =>
+  h("span", { class: `inline-flex items-center rounded-md px-2 py-0.5 text-[11px] font-bold tracking-wide ring-1 ring-inset ${TONE[tone].badge} ${extra}` }, label);
+const card = (cls, ...kids) =>
+  h("section", { class: `rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900 ${cls}` }, ...kids);
+const heading = (text) =>
+  h("h2", { class: "mb-3 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400" }, text);
+const btnPrimary = "inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500";
+const btnSecondary = "inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:hover:bg-slate-800";
+
+// ------------------------------------------------------------------ API key
+const KEY_STORAGE = "autoprocure.apiKey";
+let authRequired = false;
+let memoryKey = (() => { try { return localStorage.getItem(KEY_STORAGE) || ""; } catch { return ""; } })();
+
+function setKey(value) {
+  try { value ? localStorage.setItem(KEY_STORAGE, value) : localStorage.removeItem(KEY_STORAGE); } catch { /* blocked storage */ }
+  memoryKey = value;
+  renderLock();
+}
+
+function renderLock() {
+  const btn = $("#lock");
+  btn.hidden = !authRequired;
+  btn.className = "rounded-full border px-3 py-1 text-xs font-semibold " + (memoryKey
+    ? "border-emerald-500 text-emerald-700 dark:text-emerald-300"
+    : "border-amber-500 text-amber-700 dark:text-amber-300");
+  btn.textContent = memoryKey ? "🔓 Key set" : "🔒 Enter API key";
+}
+
+function askForKey() {
+  const dlg = $("#keyDialog");
+  $("#keyInput").value = memoryKey;
+  return new Promise((resolve) => {
+    const done = (saved) => { dlg.close(); resolve(saved); };
+    $("#keyForm").onsubmit = (e) => { e.preventDefault(); setKey($("#keyInput").value.trim()); done(Boolean(memoryKey)); };
+    $("#keyCancel").onclick = () => done(false);
+    $("#keyClear").onclick = () => { setKey(""); done(false); };
+    dlg.oncancel = () => resolve(false);
+    if (!dlg.open) dlg.showModal();
+    $("#keyInput").focus();
+  });
+}
+
+async function api(path, opts = {}, retried = false) {
+  const headers = { "Content-Type": "application/json" };
+  if (memoryKey) headers["X-API-Key"] = memoryKey;
+  const res = await fetch(path, { ...opts, headers });
+  let body = null;
+  try { body = await res.json(); } catch { /* non-JSON */ }
+  if (res.status === 401) {
+    if (!retried && await askForKey()) return api(path, opts, true);  // replay once with the new key
+    throw new Error("An API key is required. Click “Enter API key” in the header.");
+  }
+  if (!res.ok) {
+    const d = body?.detail;
+    throw new Error(body?.message || (typeof d === "string" ? d : d?.[0]?.msg) || `HTTP ${res.status}`);
+  }
+  return body;
+}
+
+// ------------------------------------------------------------ status/sidebar
+async function loadStatus() {
+  const el = $("#health");
+  try {
+    const [health, pol] = await Promise.all([api("/health"), api("/policy")]);
+    authRequired = Boolean(health.auth_required);
+    renderLock();
+    const chip = (ok, text) => h("span", {
+      class: `inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 font-medium ${ok
+        ? "border-emerald-500/50 text-emerald-700 dark:text-emerald-300"
+        : "border-amber-500/50 text-amber-700 dark:text-amber-300"}` },
+      h("span", { class: `h-2 w-2 rounded-full ${ok ? "bg-emerald-500" : "bg-amber-500"}` }), text);
+    $("#status").replaceChildren(
+      chip(true, "Backend online"),
+      chip(true, "PayPal Sandbox"),
+      chip(health.gemini_configured, health.gemini_configured ? "Gemini connected" : "Gemini key missing"),
+      chip(health.spending_mandate_on_file,
+           health.spending_mandate_on_file ? "Tier 1: vaulted auto-settle" : "Tier 1: one-click checkout"));
+    renderBudget(pol.budget);
+    renderPolicy(pol.policy);
+  } catch {
+    $("#status").replaceChildren(h("span", {
+      class: "inline-flex items-center gap-1.5 rounded-full border border-rose-500/50 px-2.5 py-1 font-medium text-rose-700 dark:text-rose-300" },
+      h("span", { class: "h-2 w-2 rounded-full bg-rose-500" }), "Backend offline"));
+  }
+}
+
+function kv(rows) {
+  return h("dl", { class: "grid grid-cols-[1fr_auto] gap-x-3 gap-y-1 text-sm" },
+    rows.map(([k, v]) => [h("dt", { class: "text-slate-500 dark:text-slate-400" }, k), h("dd", { class: "text-right font-medium" }, v)]));
+}
+
+function renderBudget(b) {
+  const total = Number(b.monthly_budget);
+  const pct = (x) => `${Math.min(100, (Number(x) / total) * 100)}%`;
+  $("#budget").replaceChildren(
+    h("div", { class: "flex items-baseline justify-between gap-2" },
+      h("span", { class: "text-2xl font-bold text-slate-900 dark:text-white" }, money(b.remaining)),
+      h("span", { class: "text-xs text-slate-500" }, `left of ${money(b.monthly_budget)} · ${b.period}`)),
+    h("div", { class: "my-2 flex h-2.5 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800", role: "img",
+               "aria-label": `${money(b.committed)} spent, ${money(b.reserved)} reserved` },
+      h("div", { class: "bg-indigo-500", style: `width:${pct(b.committed)}` }),
+      h("div", { class: "bg-amber-400", style: `width:${pct(b.reserved)}` })),
+    kv([[legend("bg-indigo-500", "Spent"), money(b.committed)],
+        [legend("bg-amber-400", "Reserved (awaiting approval)"), money(b.reserved)]]));
+}
+
+function legend(color, text) {
+  return h("span", { class: "inline-flex items-center gap-1.5" },
+    h("span", { class: `h-2 w-2 rounded-full ${color}`, "aria-hidden": "true" }), text);
+}
+
+function renderPolicy(p) {
+  $("#policy").replaceChildren(
+    kv([["Auto-approve below", money(p.auto_approve_limit)], ["Manager review up to", money(p.order_hard_cap)],
+        ["Max unit price", money(p.max_unit_price)], ["Max qty per line", p.max_quantity_per_line]]),
+    h("p", { class: "mt-2 text-xs text-slate-500 dark:text-slate-400" }, "Approved vendors: ",
+      h("span", { class: "text-slate-700 dark:text-slate-200" }, p.approved_vendors.join(", "))));
+}
+
+async function loadHistory() {
+  const list = $("#history");
+  if (authRequired && !memoryKey) return list.replaceChildren(h("li", { class: "text-slate-400" }, "Enter the API key to see requests."));
+  try {
+    const recs = await api("/requests");
+    if (!recs.length) return list.replaceChildren(h("li", { class: "text-slate-400" }, "None yet."));
+    list.replaceChildren(...recs.slice(0, 12).map((r) => h("li", {},
+      h("button", { type: "button", onclick: () => show(r),
+        class: `grid w-full grid-cols-[minmax(0,1fr)_auto] gap-x-2 rounded-lg px-2 py-1.5 text-left hover:bg-slate-100 dark:hover:bg-slate-800 ${r.request_id === currentId ? "bg-slate-100 dark:bg-slate-800" : ""}` },
+        h("span", { class: "truncate" }, r.request_text), badge(STATUS[r.status] || [r.status, "slate"]),
+        h("span", { class: "text-xs text-slate-500" }, r.request_id), h("span", { class: "text-right text-xs" }, money(r.policy.subtotal))))));
+  } catch { /* best effort */ }
+}
+
+// ------------------------------------------------------------ result view
+let currentId = null;
+let pollTimer = null;
+
+function show(rec) {
+  currentId = rec.request_id;
+  $("#result").replaceChildren(renderRecord(rec));
+  loadHistory();
+  schedulePoll(rec);
+}
+
+function renderRecord(rec) {
+  return h("div", { class: "space-y-5" },
+    h("p", { class: "text-sm text-slate-500 dark:text-slate-400" }, "Request ", h("span", { class: "font-mono text-xs" }, rec.request_id), ": “", rec.request_text, "”"),
+    renderSettlement(rec), renderFeed(rec));
+}
+
+// ------------------------------------------------------------------ icons
+function iconSvg(name) {
+  const ICONS = {
+    sparkle: '<svg class="h-4 w-4 text-indigo-600 dark:text-indigo-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3L12 3Z"/></svg>',
+    shield: '<svg class="h-4 w-4 text-emerald-600 dark:text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>',
+    refresh: '<svg class="h-4 w-4 text-amber-600 dark:text-amber-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 21h5v-5"/></svg>',
+    card: '<svg class="h-4 w-4 text-slate-700 dark:text-slate-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg>',
+    copy: '<svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg>',
+    check: '<svg class="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>',
+  };
+  const tpl = document.createElement("template");
+  tpl.innerHTML = ICONS[name] || "";
+  return tpl.content.firstChild;
+}
+
+// ---------------- Financial settlement & PayPal action card
+function renderSettlement(rec) {
+  const p = rec.payment, d = rec.policy.decision, s = rec.status;
+  const [decLabel, decTone] = DECISION[d];
+  let tone = decTone, title, lines = [], actions = [];
+  const ids = [];
+  if (p) ids.push(["PayPal Order ID", p.paypal_order_id]);
+  if (p?.capture_id) ids.push(["Transaction (capture) ID", p.capture_id]);
+
+  if (s === "paid") {
+    tone = "emerald";
+    title = p.mode === "vault_auto_capture" ? "Settled Autonomously via Vault Mandate" : "Settled & Verified via PayPal";
+    lines.push(p.mode === "vault_auto_capture"
+      ? "Captured against pre-authorized PayPal enterprise mandate. Zero human intervention."
+      : "Approved in PayPal and funds captured. Department budget committed.");
+    actions.push(h("button", {
+      type: "button",
+      class: btnSecondary,
+      onclick: (e) => {
+        const summary = [
+          "--- AUTOPROCURE RECEIPT ---",
+          `Request ID: ${rec.request_id}`,
+          `Status: Settled (${p?.mode === "vault_auto_capture" ? "Vault Mandate" : "PayPal Checkout"})`,
+          `Date: ${new Date().toLocaleString()}`,
+          `Total: ${money(rec.policy.subtotal)} ${rec.policy.currency}`,
+          `PayPal Order ID: ${p?.paypal_order_id || "N/A"}`,
+          p?.capture_id ? `Capture ID: ${p.capture_id}` : null,
+          "Items:",
+          ...rec.policy.lines.map((l) => `  - ${l.quantity}x ${l.name} (${l.sku}) @ ${money(l.unit_price)} = ${money(l.line_total)}`),
+        ].filter(Boolean).join("\n");
+        navigator.clipboard?.writeText(summary).then(() => {
+          const btn = e.currentTarget;
+          btn.replaceChildren(iconSvg("check"), " Receipt Copied");
+          setTimeout(() => { btn.replaceChildren(iconSvg("copy"), " Copy Receipt"); }, 2000);
+        });
+      }
+    }, iconSvg("copy"), " Copy Receipt"));
+  } else if (s === "awaiting_approval" && d === "auto_approved") {
+    title = "Auto-Approved by Spending Policy";
+    lines.push("All policy guardrails passed and the total is within the auto-approval threshold. Complete 1-click PayPal checkout to execute payment.");
+    actions.push(h("a", { class: btnPrimary, href: p.approval_url, target: "_blank", rel: "noopener",
+                          onclick: () => schedulePoll(rec, true) }, "Complete PayPal Checkout ↗"),
+                 h("button", { type: "button", class: btnSecondary, onclick: () => refresh(rec.request_id) }, "Verify Settlement Status"));
+  } else if (s === "awaiting_approval") {
+    title = "Manager Approval Required";
+    lines.push("Order complies with catalog and specs, but exceeds the $150 auto-approval threshold. Requires 1-click manager sign-off.");
+    actions.push(h("a", { class: btnPrimary, href: p.approval_url, target: "_blank", rel: "noopener",
+                          onclick: () => schedulePoll(rec, true) }, "Approve in PayPal Sandbox ↗"),
+                 h("button", { type: "button", class: btnSecondary, onclick: () => refresh(rec.request_id) }, "Verify Settlement Status"));
+  } else if (s === "blocked") {
+    tone = "rose"; title = "Purchase Blocked by Policy Engine";
+    lines.push("No purchase order was submitted. Sourcing failed compliance checks:");
+  } else if (s === "needs_review") {
+    tone = "rose"; title = "Finance Review Required";
+    lines.push(rec.error || "PayPal's result did not match what policy approved.",
+               "Budget reservation held until manual reconciliation.");
+  } else if (s === "payment_failed") {
+    tone = "rose"; title = "Payment Failed";
+    lines.push(rec.error || "PayPal rejected the payment.", "No money moved; the budget reservation was released.");
+  } else if (s === "payment_pending") {
+    tone = "amber"; title = "Payment Pending at PayPal";
+    lines.push("PayPal accepted the capture but has not settled it yet. Budget stays reserved.");
+  } else if (s === "cancelled") {
+    tone = "slate"; title = "Cancelled in PayPal";
+    lines.push("The approver cancelled. Budget reservation released.");
+  }
+  if (rec.error && s === "awaiting_approval") lines.push(rec.error);
+
+  const blockers = s === "blocked" ? rec.policy.checks.filter((c) => !c.passed && c.severity === "block") : [];
+
+  return h("section", { class: `rounded-xl border-2 p-5 ${TONE[tone].card}` },
+    h("div", { class: "flex flex-wrap items-start justify-between gap-3" },
+      h("div", { class: "min-w-0 space-y-2" },
+        h("div", { class: "flex flex-wrap items-center gap-2" }, badge([decLabel, decTone]),
+          s !== "blocked" ? badge(STATUS[s] || [s, "slate"]) : null),
+        h("h3", { class: "text-xl font-bold" }, title)),
+      h("div", { class: "text-right" },
+        h("div", { class: "text-3xl font-bold" }, money(rec.policy.subtotal)),
+        h("div", { class: "text-xs text-slate-500" }, `${rec.policy.currency} · verified catalog pricing`))),
+    lines.map((l) => h("p", { class: "mt-2 text-sm" }, l)),
+    blockers.length ? h("ul", { class: "mt-2 space-y-1 text-sm" }, blockers.map((c) =>
+      h("li", { class: "flex gap-2" }, h("span", { class: "font-bold text-rose-600 dark:text-rose-400" }, "✕"),
+        h("span", {}, h("strong", {}, RULES[c.rule] || c.rule), ": ", c.detail)))) : null,
+    p?.note && s !== "paid" ? h("p", { class: "mt-3 rounded-lg bg-white/60 px-3 py-2 text-xs text-slate-600 dark:bg-slate-900/60 dark:text-slate-300" }, p.note) : null,
+    ids.length ? h("dl", { class: "mt-3 grid gap-x-4 gap-y-1 font-mono text-xs sm:grid-cols-[auto_1fr]" },
+      ids.map(([k, v]) => [h("dt", { class: "text-slate-500" }, k), h("dd", { class: "break-all" }, v)])) : null,
+    actions.length ? h("div", { class: "mt-4 flex flex-wrap gap-2" }, actions) : null,
+    renderLines(rec.policy),
+    rec.exemption_request ? h("details", { class: "mt-4" },
+      h("summary", { class: "cursor-pointer text-sm font-semibold" }, "Drafted policy exemption request"),
+      h("pre", { class: "mt-2 whitespace-pre-wrap break-words rounded-lg border border-slate-200 bg-white p-3 font-mono text-xs dark:border-slate-700 dark:bg-slate-950" }, rec.exemption_request),
+      h("button", { type: "button", class: `${btnSecondary} mt-2`,
+        onclick: (e) => navigator.clipboard?.writeText(rec.exemption_request).then(() => { e.target.textContent = "Copied"; }) }, "Copy")) : null);
+}
+
+function renderLines(policy) {
+  if (!policy.lines.length) return null;
+  const th = (t, r) => h("th", { class: `px-2 py-2 text-xs font-semibold text-slate-500 ${r ? "text-right" : "text-left"}` }, t);
+  const td = (t, r, extra = "") => h("td", { class: `px-2 py-2 ${r ? "text-right" : ""} ${extra}` }, t);
+  return h("div", { class: "mt-4 overflow-x-auto rounded-lg border border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-950" },
+    h("table", { class: "w-full min-w-[560px] text-sm" },
+      h("thead", { class: "border-b border-slate-200 dark:border-slate-700" },
+        h("tr", {}, th("Item"), th("SKU"), th("Vendor"), th("Unit price", true), th("Qty", true), th("Total", true))),
+      h("tbody", { class: "divide-y divide-slate-100 dark:divide-slate-800" }, policy.lines.map((l) => h("tr", {},
+        td(l.name), td(l.sku, false, "font-mono text-xs text-slate-500"), td(l.vendor),
+        td(money(l.unit_price), true), td(l.quantity, true), td(money(l.line_total), true, "font-medium")))),
+      h("tfoot", { class: "border-t border-slate-200 dark:border-slate-700" },
+        h("tr", {}, h("td", { colspan: 5, class: "px-2 py-2 font-semibold" }, "Order total"),
+          td(money(policy.subtotal), true, "font-bold")))));
+}
+
+// ---------------- Procurement execution & audit feed
+function step(iconEl, title, ...body) {
+  return h("li", { class: "relative pl-10" },
+    h("span", { class: "absolute left-0 top-0 flex h-7 w-7 items-center justify-center rounded-full bg-slate-100 ring-1 ring-slate-200 dark:bg-slate-800 dark:ring-slate-700", "aria-hidden": "true" }, iconEl),
+    h("div", { class: "text-sm font-semibold tracking-tight text-slate-900 dark:text-slate-100" }, title),
+    h("div", { class: "mt-1 space-y-2 text-sm" }, ...body));
+}
+
+function checkList(checks, onlyFailures) {
+  const failing = checks.filter((c) => !c.passed);
+  const passing = checks.filter((c) => c.passed);
+
+  const row = (c, state) => {
+    const style = {
+      pass: ["✓", "text-emerald-600 dark:text-emerald-400", ""],
+      fail: ["✕", "text-rose-600 dark:text-rose-400", "bg-rose-50 dark:bg-rose-500/10 border-l-2 border-rose-500"],
+      review: ["!", "text-amber-600 dark:text-amber-400", "bg-amber-50 dark:bg-amber-500/10 border-l-2 border-amber-500"]
+    }[state];
+    return h("li", { class: `grid grid-cols-[18px_160px_minmax(0,1fr)] items-baseline gap-2 rounded-md px-2 py-1 text-xs max-sm:grid-cols-[18px_minmax(0,1fr)] ${style[2]}` },
+      h("span", { class: `font-bold ${style[1]}`, "aria-hidden": "true" }, style[0]),
+      h("span", { class: "font-semibold text-slate-800 dark:text-slate-200" }, h("span", { class: "sr-only" }, `${state}: `), RULES[c.rule] || c.rule),
+      h("span", { class: "text-slate-600 dark:text-slate-300 max-sm:col-start-2" }, c.detail));
+  };
+
+  if (onlyFailures) {
+    if (!failing.length) return null;
+    return h("ul", { class: "mt-1 grid gap-1" }, failing.map((c) => row(c, c.severity === "block" ? "fail" : "review")));
+  }
+
+  // All checks passed -> collapse into clean summary disclosure
+  if (!failing.length) {
+    return h("details", { class: "group mt-2 rounded-lg border border-emerald-500/30 bg-emerald-50/50 p-2.5 text-xs dark:border-emerald-500/20 dark:bg-emerald-500/5" },
+      h("summary", { class: "flex cursor-pointer select-none items-center justify-between font-semibold text-emerald-800 dark:text-emerald-300" },
+        h("span", { class: "flex items-center gap-1.5" },
+          h("span", { class: "flex h-4 w-4 items-center justify-center rounded-full bg-emerald-200 text-[10px] text-emerald-800 dark:bg-emerald-800/40 dark:text-emerald-200" }, "✓"),
+          `All ${passing.length} compliance & spending checks passed`),
+        h("span", { class: "text-[11px] font-normal text-slate-500 hover:text-slate-700 dark:text-slate-400 group-open:hidden" }, "View details ▾"),
+        h("span", { class: "hidden text-[11px] font-normal text-slate-500 hover:text-slate-700 dark:text-slate-400 group-open:inline" }, "Hide ▴")),
+      h("ul", { class: "mt-2.5 grid gap-1 border-t border-emerald-500/20 pt-2 dark:border-emerald-500/10" }, passing.map((c) => row(c, "pass"))));
+  }
+
+  // Some checks failed or require review -> show failing openly, collapse passing
+  return h("div", { class: "mt-2 space-y-2 text-xs" },
+    h("ul", { class: "grid gap-1.5" }, failing.map((c) => row(c, c.severity === "block" ? "fail" : "review"))),
+    passing.length ? h("details", { class: "group rounded-md border border-slate-200 bg-slate-50/50 p-2 text-xs dark:border-slate-800 dark:bg-slate-900/50" },
+      h("summary", { class: "cursor-pointer select-none text-[11px] font-medium text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200" },
+        `${passing.length} passing checks passed ▾`),
+      h("ul", { class: "mt-2 grid gap-1 border-t border-slate-200 pt-1.5 dark:border-slate-800" }, passing.map((c) => row(c, "pass")))) : null);
+}
+
+function renderFeed(rec) {
+  const attempts = rec.attempts?.length ? rec.attempts
+    : [{ attempt: 1, model: null, plan: rec.plan, policy: rec.policy, feedback: null }];
+  const items = [];
+  attempts.forEach((a, i) => {
+    const final = i === attempts.length - 1;
+    if (a.feedback) {
+      const violations = a.feedback.split("\n").filter((l) => l.startsWith("- [")).map((l) => l.slice(2));
+      items.push(step(iconSvg("refresh"), `Self-Correction · Plan ${a.attempt - 1} revised to meet policy`,
+        h("ul", { class: "list-inside list-disc text-rose-700 dark:text-rose-300" }, violations.map((v) => h("li", {}, v)))));
+    }
+    const budget = a.policy.effective_budget ? money(a.policy.effective_budget) : "none stated";
+    items.push(step(iconSvg("sparkle"), `Catalog Sourcing & Spec Matching · Plan ${a.attempt}${a.model ? ` (${a.model})` : ""}`,
+      a.plan.line_items.length
+        ? h("ul", { class: "space-y-1" }, a.plan.line_items.map((li) => h("li", {},
+            h("span", { class: "font-mono text-xs font-semibold" }, `${li.quantity} × ${li.sku}`),
+            h("span", { class: "text-slate-500 dark:text-slate-400" }, ` · ${li.reason}`))))
+        : h("p", { class: "text-slate-500" }, "No catalog SKUs matched."),
+      h("p", { class: "text-xs text-slate-500 dark:text-slate-400" }, "Target budget: ", h("strong", {}, budget),
+        a.plan.unmatched_requests.length ? ` · Could not source: ${a.plan.unmatched_requests.join("; ")}` : ""),
+      h("p", { class: "text-xs italic text-slate-500 dark:text-slate-400" }, a.plan.reasoning)));
+    items.push(step(iconSvg("shield"), final ? "Spending & Compliance Guardrails (Final)" : "Spending & Compliance Guardrails",
+      h("div", { class: "flex items-center gap-2" }, badge(DECISION[a.policy.decision]),
+        h("span", { class: "text-xs text-slate-500" }, `subtotal ${money(a.policy.subtotal)} · verified supplier catalog pricing`)),
+      checkList(a.policy.checks, !final)));
+  });
+  const p = rec.payment;
+  const settleText = {
+    paid: `Captured ${money(rec.policy.subtotal)} · PayPal Order: ${p?.paypal_order_id} · Capture: ${p?.capture_id}`,
+    awaiting_approval: `PayPal order ${p?.paypal_order_id} prepared · awaiting checkout approval`,
+    payment_pending: `Capture processing at PayPal · order ${p?.paypal_order_id}`,
+    blocked: "Order rejected by policy guardrails before reaching payment gateway.",
+    payment_failed: `Payment gateway error: ${rec.error}`,
+    needs_review: `Flagged for manual finance reconciliation: ${rec.error}`,
+    cancelled: "Checkout cancelled in PayPal; allocated budget returned to department balance.",
+  }[rec.status] || rec.status;
+  items.push(step(iconSvg("card"), "Payment Settlement & Gateway Status", h("p", { class: "text-slate-600 dark:text-slate-300" }, settleText)));
+
+  return card("", heading(attempts.length > 1
+      ? `Procurement Audit Timeline · self-corrected in ${attempts.length} iterations` : "Procurement Audit & Execution Timeline"),
+    h("ol", { class: "space-y-5" }, items));
+}
+
+// ------------------------------------------------------------ empty / loading / error
+function renderEmpty() {
+  $("#result").replaceChildren(card("py-14 text-center",
+    h("p", { class: "text-lg font-semibold" }, "Describe what the team needs, or pick a scenario."),
+    h("p", { class: "mt-1 text-sm text-slate-500" }, "AI agent plans it, policy engine enforces compliance, PayPal settles payment."),
+    h("div", { class: "mt-6 flex flex-wrap justify-center gap-2 text-sm" },
+      ["1. Sourcing & Specs", "→", "2. Policy Verification", "→", "3. Self-Correction Loop", "→", "4. PayPal Settlement"].map((t) =>
+        h("span", { class: t === "→" ? "py-1 font-bold text-slate-400" : "rounded-lg border border-slate-200 px-3 py-1 font-medium dark:border-slate-700" }, t)))));
+}
+
+function showLoading() {
+  const started = performance.now();
+  const timer = h("span", {}, "0s");
+  const id = setInterval(() => { timer.textContent = `${Math.round((performance.now() - started) / 1000)}s`; }, 500);
+  $("#result").replaceChildren(card("flex items-center gap-4",
+    h("span", { class: "spin h-6 w-6 shrink-0 rounded-full border-[3px] border-slate-200 border-t-indigo-600 dark:border-slate-700 dark:border-t-indigo-400" }),
+    h("div", {}, h("p", { class: "font-semibold" }, "Executing Procurement Workflow…"),
+      h("p", { class: "text-sm text-slate-500" }, "Sourcing items → Verifying specifications & budget → Preparing PayPal settlement · ", timer))));
+  return () => clearInterval(id);
+}
+
+function showError(message) {
+  $("#result").replaceChildren(card("",
+    heading("Request failed"), h("p", { class: "text-rose-600 dark:text-rose-400" }, message),
+    h("p", { class: "mt-1 text-sm text-slate-500" }, "Nothing was purchased. Busy Gemini models are retried automatically; try again.")));
+}
+
+// ------------------------------------------------------------ polling & actions
+function schedulePoll(rec, eager = false) {
+  clearTimeout(pollTimer);
+  if (rec.status !== "awaiting_approval") return;
+  let polls = 0;
+  const tick = async () => {
+    if (++polls > 200 || currentId !== rec.request_id) return;
+    if (document.visibilityState === "visible") {
+      try {
+        const fresh = await api(`/requests/${encodeURIComponent(rec.request_id)}`);
+        if (fresh.status !== "awaiting_approval") { show(fresh); loadStatus(); return; }
+      } catch { /* keep polling */ }
+    }
+    pollTimer = setTimeout(tick, 3000);
+  };
+  pollTimer = setTimeout(tick, eager ? 1500 : 3000);
+}
+
+async function refresh(id) {
+  try { show(await api(`/requests/${encodeURIComponent(id)}`)); loadStatus(); }
+  catch (e) { showError(e.message); }
+}
+
+async function submit() {
+  const text = $("#req").value.trim();
+  if (text.length < 3) return $("#req").focus();
+  const btn = $("#submit");
+  btn.disabled = true;
+  $("#submitSpinner").classList.remove("hidden");
+  $("#submitLabel").textContent = "Agent running…";
+  clearTimeout(pollTimer);
+  const stop = showLoading();
+  try {
+    show(await api("/procure", { method: "POST", body: JSON.stringify({ request: text }) }));
+  } catch (e) {
+    showError(e.message);
+  } finally {
+    stop();
+    btn.disabled = false;
+    $("#submitSpinner").classList.add("hidden");
+    $("#submitLabel").textContent = "Submit Procurement Request";
+    loadStatus();
+  }
+}
+
+// ------------------------------------------------------------------ boot
+$("#form").addEventListener("submit", (e) => { e.preventDefault(); submit(); });
+$("#req").addEventListener("keydown", (e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) submit(); });
+$("#lock").addEventListener("click", async () => { await askForKey(); loadHistory(); });
+$("#presets").replaceChildren(...PRESETS.map((p) => h("button", {
+    type: "button", onclick: () => { $("#req").value = p.text; $("#req").focus(); },
+    class: "flex gap-3 rounded-lg border border-slate-200 px-3 py-2 text-left text-sm hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800" },
+  h("span", { class: `mt-1.5 h-2 w-2 shrink-0 rounded-full ${TONE[p.tone].dot}` }),
+  h("span", {}, h("span", { class: "block text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400" }, p.tag), p.text))));
+
+renderEmpty();
+(async () => {
+  await loadStatus();  // learn whether auth is required before calling protected routes
+  loadHistory();
+  setInterval(loadStatus, 15000);  // live health indicator
+  const focus = new URLSearchParams(location.search).get("request");
+  if (focus) { history.replaceState(null, "", "/"); refresh(focus); }
+})();
+</script>
+</body>
+</html>
